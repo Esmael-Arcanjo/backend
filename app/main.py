@@ -96,14 +96,9 @@ async def health():
 app.include_router(api_router)
 register_error_handlers(app)
 
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://leamse.com",
-        "https://www.leamse.com",
-        "http://localhost:3000", # Adicione caso rode localmente
-    ],
+    allow_origins=["https://leamse.com", "https://www.leamse.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
