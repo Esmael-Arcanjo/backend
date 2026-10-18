@@ -42,28 +42,77 @@ def _format_amount(cents: int, currency: str) -> str:
         return f"{cents} {currency}"
 
 
-async def _get_or_create_stripe_price(service: str, interval: str, amount: int, currency: str) -> str:
-    """Create/reuse a Stripe Price for a given service+interval. Needed to modify subscriptions."""
+async def _get_or_create_stripe_price(
+    service: str,
+    interval: str,
+    amount: int,
+    currency: str,
+) -> str:
+    """Create or reuse a Stripe Price for a given service and interval."""
+
     lookup = f"leamse_{service}_{interval}"
-    existing = stripe.Price.list(lookup_keys=[lookup], active=True, limit=1).data
-    if existing and existing[0].unit_amount == amount and existing[0].currency == currency.lower():
+
+    existing = stripe.Price.list(
+        lookup_keys=[lookup],
+        active=True,
+        limit=1,
+    ).data
+
+    if (
+        existing
+        and existing[0].unit_amount == amount
+        and existing[0].currency == currency.lower()
+    ):
         return existing[0].id
-    for p in existing:
-        stripe.Price.modify(p.id, active=False)
-    # Look up or create product.
+
+    # Deactivate an outdated price using this lookup key.
+    for price in existing:
+        stripe.Price.modify(price.id, active=False)
+
+    # Look up or create the Leamse product.
     prod_lookup = f"leamse_{service}"
-    products = stripe.Product.list(active=True, limit=100).data
-    product = next((p for p in products if (p.metadata or {}).get("leamse_product_id") == prod_lookup), None)
+
+    products = stripe.Product.list(
+        active=True,
+        limit=100,
+    ).data
+
+    def get_leamse_product_id(product):
+        try:
+            metadata = product["metadata"]
+            return metadata["leamse_product_id"]
+        except (KeyError, TypeError, AttributeError):
+            return None
+
+    product = next(
+        (
+            p for p in products
+            if get_leamse_product_id(p) == prod_lookup
+        ),
+        None,
+    )
+
     if not product:
         product = stripe.Product.create(
             name=f"LEAMSE {service.capitalize()}",
-            metadata={"leamse_product_id": prod_lookup, "managed_by": "leamse"},
+            metadata={
+                "leamse_product_id": prod_lookup,
+                "managed_by": "leamse",
+            },
         )
+
+    # Create the recurring price.
     price = stripe.Price.create(
-        product=product.id, unit_amount=amount, currency=currency.lower(),
-        recurring={"interval": "year" if interval == "yearly" else "month"},
-        lookup_key=lookup, transfer_lookup_key=True,
+        product=product.id,
+        unit_amount=amount,
+        currency=currency.lower(),
+        recurring={
+            "interval": "year" if interval == "yearly" else "month",
+        },
+        lookup_key=lookup,
+        transfer_lookup_key=True,
     )
+
     return price.id
 
 
