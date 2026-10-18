@@ -53,26 +53,46 @@ def _serialize(doc: dict) -> dict:
             doc[k] = str(v)
     return doc
 
-
 async def get_mp_user(request: Request) -> dict:
-    token = request.cookies.get("mp_access_token") or ""
+    # 1. Tenta obter o token do cabeçalho Authorization
+    auth = request.headers.get("authorization", "")
+    token = ""
+
+    if auth.startswith("Bearer "):
+        token = auth[7:].strip()
+
+    # 2. Se não houver Bearer, utiliza o cookie
     if not token:
-        auth = request.headers.get("authorization", "")
-        if auth.startswith("Bearer "):
-            token = auth[7:]
+        token = request.cookies.get("mp_access_token") or ""
+
+    # 3. Verifica se existe token
     if not token:
         raise HTTPException(401, "Not authenticated")
+
+    # 4. Valida o token
     try:
         payload = decode_token(token)
     except Exception:
         raise HTTPException(401, "Invalid token")
+
+    # 5. Confirma que o token pertence ao marketplace
     if payload.get("aud") != "marketplace":
         raise HTTPException(401, "Invalid audience")
-    user = await db.mp_users.find_one({"_id": oid(payload["sub"])})
+
+    # 6. Procura o usuário
+    try:
+        user_id = oid(payload["sub"])
+    except Exception:
+        raise HTTPException(401, "Invalid user ID")
+
+    user = await db.mp_users.find_one({"_id": user_id})
+
     if not user:
         raise HTTPException(401, "User not found")
+
     if user.get("banned"):
         raise HTTPException(403, "Conta suspensa")
+
     return _serialize(user)
 
 
