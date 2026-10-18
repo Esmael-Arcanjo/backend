@@ -98,7 +98,7 @@ register_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://leamse.com", "https://www.leamse.com"],
+    allow_origins=["https://leamse.com", "https://www.leamse.com", "https://wibaza.com", "https://www.wibaza.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
