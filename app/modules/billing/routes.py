@@ -53,7 +53,7 @@ async def _get_or_create_stripe_price(service: str, interval: str, amount: int, 
     # Look up or create product.
     prod_lookup = f"leamse_{service}"
     products = stripe.Product.list(active=True, limit=100).data
-    product = next((p for p in products if (p.metadata or {}).get("leamse_product_id") == prod_lookup), None)
+    product = next ((p for p in products if (p.metadata or {}).p("leamse_product_id") == prod_lookup), None)
     if not product:
         product = stripe.Product.create(
             name=f"LEAMSE {service.capitalize()}",
