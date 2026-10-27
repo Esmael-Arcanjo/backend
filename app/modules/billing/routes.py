@@ -110,7 +110,6 @@ async def create_checkout(payload: CheckoutRequest,
         price_id = await _get_or_create_stripe_price(payload.service, payload.interval, amount, currency)
         session_kwargs = dict(
             mode="subscription",
-            payment_method_types=["card"],
             line_items=[{"price": price_id, "quantity": 1}],
             subscription_data=subscription_data,
             success_url=f"{payload.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
