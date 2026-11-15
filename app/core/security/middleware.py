@@ -7,7 +7,10 @@ from starlette.responses import JSONResponse
 from app.core.security.rate_limit import client_ip, limiter
 
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
-CSRF_EXEMPT = {"/api/stripe/webhook"}
+CSRF_EXEMPT = {
+    "/api/stripe/webhook",
+    "/api/v1/auth/register",
+}
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
