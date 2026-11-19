@@ -6,8 +6,6 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
-import res
-
 import resend
 
 from app.database.mongo import db
