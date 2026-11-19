@@ -34,7 +34,7 @@ class Settings:
         self.smtp_port = int(os.environ.get("SMTP_PORT", "587"))
         self.smtp_user = os.environ.get("SMTP_USER", "")
         self.smtp_password = os.environ.get("SMTP_PASSWORD", "")
-        self.email_from = os.environ.get("EMAIL_FROM", "leamse.com")
+        self.email_from = os.environ.get("EMAIL_FROM", "no-reply@leamse.com")
         self.require_email_verification = os.environ.get("REQUIRE_EMAIL_VERIFICATION", "false") == "true"
 
 

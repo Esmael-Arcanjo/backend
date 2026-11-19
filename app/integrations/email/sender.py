@@ -6,16 +6,20 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
-import httpx
+import res
+
+import resend
 
 from app.database.mongo import db
 from app.shared.models import utcnow
 
 logger = logging.getLogger("email")
 
-EMAIL_BASE_URL = "https://integrations.emergentagent.com"
-EMAIL_KEY = os.environ["EMERGENT_EMAIL_KEY"]
-EMAIL_FROM_NAME = os.environ["EMAIL_FROM_NAME"]
+# Configuração da API do Resend direto pelo .env
+resend.api_key = os.environ.get("RESEND_API_KEY")
+
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "noreply@leamse.com")
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "LEAMSE")
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
@@ -108,32 +112,31 @@ def _render_html(body: str) -> str:
 
 async def _send_resend(to: str, subject: str, html: str) -> str | None:
     _assert_safe_email(subject, html)
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    
+    params = {
+        "from": f"{EMAIL_FROM_NAME} <{EMAIL_FROM}>",
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    }
     if EMAIL_REPLY_TO:
-        payload["contact_email"] = EMAIL_REPLY_TO
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send", headers={"X-Email-Key": EMAIL_KEY},
-                                 json=payload)
-    resp.raise_for_status()
-    return resp.json().get("id")
+        params["reply_to"] = EMAIL_REPLY_TO
+
+    # Chamada oficial assíncrona/direta do SDK do Resend
+    response = resend.Emails.send(params)
+    return response.get("id") if isinstance(response, dict) else getattr(response, "id", None)
 
 
 async def send_email(to: str, subject: str, body: str, kind: str) -> None:
-    """Sends via Emergent managed Resend; a failed send is logged and recorded, never raised to the caller."""
+    """Sends via native Resend; a failed send is logged and recorded, never raised to the caller."""
     html = _render_html(body)
     delivery, provider_id = "sent", None
     try:
         provider_id = await _send_resend(to, subject, html)
-    except httpx.HTTPStatusError as e:
-        try:
-            code = e.response.json().get("code", "")
-        except ValueError:
-            code = ""
-        delivery = f"failed:{code or e.response.status_code}"
-        logger.warning("Email '%s' not delivered (%s): %s", kind, e.response.status_code, e.response.text[:300])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         delivery = "failed:error"
         logger.error("Email '%s' send error: %s", kind, e)
+        
     redacted = re.sub(r"token=[^\s&]+", "token=[REDACTED]", body)
     await db.email_outbox.insert_one({"to": to, "subject": subject, "body": redacted, "kind": kind,
                                       "delivery": delivery, "provider_id": provider_id, "created_at": utcnow()})
