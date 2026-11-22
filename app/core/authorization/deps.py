@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 
 from bson import ObjectId
@@ -53,6 +54,8 @@ async def resolve_product_context(request: Request, user: dict, product_key: str
                                                     "is_current": True})
     if not subscription or subscription["status"] not in VALID_SUBSCRIPTION:
         raise HTTPException(status_code=402, detail="Assinatura do produto inativa")
+    if subscription.get("billing_method") in ("pix", "grant") and subscription.get("current_period_end", 0) < time.time():
+        raise HTTPException(status_code=402, detail="Período do plano encerrado. Renove para continuar")
     if subscription["status"] == "past_due" and permission not in {"read", "billing"}:
         raise HTTPException(status_code=402, detail="Pagamento pendente: acesso somente leitura")
     role = grant["role"]

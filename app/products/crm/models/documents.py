@@ -26,6 +26,14 @@ class Lead(_Tenant):
     custom_fields: Dict[str, Any] = {}
     converted_contact_id: Optional[PyObjectId] = None
     converted_opportunity_id: Optional[PyObjectId] = None
+    phone_normalized: Optional[str] = None
+    city: Optional[str] = None
+    intent: Optional[str] = None
+    wants: Optional[str] = None
+    price: Optional[str] = None
+    published: bool = False
+    contact_id: Optional[PyObjectId] = None
+    opportunity_id: Optional[PyObjectId] = None
 
 
 class Contact(_Tenant):
@@ -36,6 +44,7 @@ class Contact(_Tenant):
     position: Optional[str] = None
     notes: Optional[str] = None
     tags: List[str] = []
+    phone_normalized: Optional[str] = None
 
 
 class Opportunity(_Tenant):

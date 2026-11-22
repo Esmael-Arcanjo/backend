@@ -24,6 +24,8 @@ def get_or_create_product(key: str, name: str):
 def main():
     names = {p["key"]: p["name"] for p in PRODUCTS if p["status"] == "available"}
     for plan in PLANS:
+        if not plan["price_cents"]:
+            continue
         if plan["product_key"] not in names:
             continue
         product = get_or_create_product(f"{plan['product_key']}_{plan['plan_key']}",

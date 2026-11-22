@@ -33,7 +33,7 @@ async def _resolve_organization(body: CheckoutIn, user: dict) -> ObjectId:
         raise HTTPException(status_code=422, detail="Informe os dados da organização")
     reusable = await db.organizations.find_one({"owner_id": user["_id"], "status": "active",
                                                "name": body.organization.name})
-    if reusable and not await db.subscriptions.find_one({"organization_id": reusable["_id"],
+    if reusable and not await db.subscriptions.find_one({"organization_id": reusable["_id"], "price_cents": {"$gt": 0},
                                                          "product_key": body.product_key, "is_current": True}):
         await db.subscriptions.update_many({"organization_id": reusable["_id"], "product_key": body.product_key,
                                             "status": "pending"}, {"$set": {"status": "expired",
@@ -59,19 +59,44 @@ async def create_checkout(body: CheckoutIn, request: Request, user: dict = Depen
     if not plan:
         raise HTTPException(status_code=400, detail="Plano inválido")
     org_id = await _resolve_organization(body, user)
-    if await db.subscriptions.find_one({"organization_id": org_id, "product_key": body.product_key,
-                                        "is_current": True}):
-        raise HTTPException(status_code=409, detail="Esta organização já possui assinatura deste produto")
+    current = await db.subscriptions.find_one({"organization_id": org_id, "product_key": body.product_key,
+                                               "is_current": True})
+    if current and current.get("price_cents", 0) > 0 and current.get("billing_method") not in ("pix", "grant"):
+        if not current.get("stripe_subscription_id") or plan["price_cents"] == 0 or body.payment_method == "pix":
+            raise HTTPException(status_code=409, detail="Para trocar este plano use cartão; para o Grátis, cancele a assinatura atual")
+        if current["plan_key"] == body.plan_key:
+            raise HTTPException(status_code=409, detail="Você já está neste plano")
+        stripe_client.change_plan(current["stripe_subscription_id"], lookup_key(body.product_key, body.plan_key, plan["interval"]))
+        await db.subscriptions.update_one({"_id": current["_id"]}, {"$set": {
+            "plan_key": body.plan_key, "price_cents": plan["price_cents"], "interval": plan["interval"],
+            "cancel_at_period_end": False, "updated_at": utcnow()}})
+        await audit("subscription.plan_changed", user_id=user["_id"], organization_id=org_id, product_key=body.product_key,
+                    target_type="subscription", target_id=str(current["_id"]), request=request,
+                    metadata={"from": current["plan_key"], "to": body.plan_key})
+        return {"checkout_url": None, "activated": True, "changed": True, "slug": product["slug"]}
+    if current and plan["price_cents"] == 0:
+        raise HTTPException(status_code=409, detail="Esta organização já possui este produto")
+    pix = body.payment_method == "pix" and plan["price_cents"] > 0
     now = utcnow()
     sub = {"organization_id": org_id, "product_key": body.product_key, "plan_key": body.plan_key,
            "segment": body.segment, "status": "pending", "is_current": False, "created_by": user["_id"],
            "price_cents": plan["price_cents"], "currency": plan["currency"], "cancel_at_period_end": False,
-           "created_at": now, "updated_at": now}
+           "billing_method": "pix" if pix else ("free" if plan["price_cents"] == 0 else "card"),
+           "interval": plan["interval"], "created_at": now, "updated_at": now}
     sub_id = (await db.subscriptions.insert_one(sub)).inserted_id
+    if plan["price_cents"] == 0:
+        await subs.activate_subscription(sub_id, None, None, "free_plan")
+        await audit("billing.free_plan_activated", user_id=user["_id"], organization_id=org_id,
+                    product_key=body.product_key, target_type="subscription", target_id=str(sub_id), request=request)
+        return {"checkout_url": None, "activated": True, "slug": product["slug"]}
     metadata = {"subscription_id": str(sub_id), "organization_id": str(org_id), "user_id": str(user["_id"]),
                 "product_key": body.product_key}
-    session = stripe_client.create_subscription_checkout(lookup_key(body.product_key, body.plan_key, plan["interval"]),
-                                                         body.origin_url, user["email"], metadata)
+    if pix:
+        session = stripe_client.create_pix_checkout(plan["price_cents"], f"{product['name']} — {plan['name']}",
+                                                    body.origin_url, user["email"], metadata)
+    else:
+        session = stripe_client.create_subscription_checkout(
+            lookup_key(body.product_key, body.plan_key, plan["interval"]), body.origin_url, user["email"], metadata)
     await db.payment_records.insert_one({
         "stripe_session_id": session.id, "subscription_id": sub_id, "organization_id": org_id,
         "user_id": user["_id"], "product_key": body.product_key, "amount": float(plan["price_cents"]) / 100,
@@ -119,7 +144,8 @@ async def stripe_webhook(request: Request):
     except DuplicateKeyError:
         return {"status": "duplicate"}
     obj, kind = event["data"]["object"], event["type"]
-    if kind == "checkout.session.completed" and obj.get("payment_status") == "paid":
+    if (kind == "checkout.session.completed" and obj.get("payment_status") == "paid") \
+            or kind == "checkout.session.async_payment_succeeded":
         record = await db.payment_records.find_one({"stripe_session_id": obj["id"]})
         if record:
             await db.payment_records.update_one({"_id": record["_id"]}, {"$set": {"payment_status": "paid",
@@ -138,6 +164,21 @@ async def stripe_webhook(request: Request):
     elif kind == "invoice.paid" and obj.get("subscription"):
         await subs.apply_stripe_status(obj["subscription"], "active", event["created"], None, None)
     return {"status": "ok"}
+
+
+@router.get("/api/v1/billing/{product_key}/current")
+async def my_current(product_key: str, user: dict = Depends(get_current_user)):
+    """Current subscription the user owns for a product, so plan changes reuse org and segment."""
+    orgs = [m["organization_id"] async for m in db.organization_members.find(
+        {"user_id": user["_id"], "role": "owner", "status": "active"})]
+    sub = await db.subscriptions.find_one({"organization_id": {"$in": orgs}, "product_key": product_key,
+                                           "is_current": True})
+    if not sub:
+        return {"current": None}
+    org = await db.organizations.find_one({"_id": sub["organization_id"]})
+    return {"current": {"organization_id": str(sub["organization_id"]), "organization_name": org["name"] if org else "",
+                        "segment": sub["segment"], "plan_key": sub["plan_key"], "status": sub["status"],
+                        "billing_method": sub.get("billing_method", "card")}}
 
 
 @router.get("/api/v1/billing/{product_key}/subscription")

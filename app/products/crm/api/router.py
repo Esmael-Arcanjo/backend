@@ -46,10 +46,13 @@ async def segment_config(ctx: ProductContext = Depends(read)):
 @router.get("/leads")
 async def list_leads(q: Optional[str] = Query(None, max_length=80),
                      status: Optional[str] = Query(None, pattern=r"^(new|contacted|qualified|lost|converted)$"),
+                     source: Optional[str] = Query(None, pattern=r"^(manual|site|whatsapp|instagram)$"),
                      ctx: ProductContext = Depends(read)):
-    filters = _search(q, ["name", "email", "company"])
+    filters = _search(q, ["name", "email", "company", "phone", "wants", "city"])
     if status:
         filters["status"] = status
+    if source:
+        filters["source"] = {"$in": [source, None]} if source == "manual" else source
     return {"items": [x.out() for x in await repos.leads.list(ctx.org_id, filters)]}
 
 

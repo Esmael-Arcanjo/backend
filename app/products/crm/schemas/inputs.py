@@ -15,8 +15,11 @@ class LeadIn(StrictInput):
     email: Optional[EmailStr] = None
     phone: Optional[str] = Field(default=None, max_length=30)
     company: Optional[str] = Field(default=None, max_length=140)
-    source: Optional[str] = Field(default=None, max_length=60)
+    source: Optional[str] = Field(default="manual", max_length=60)
     status: str = Field(default="new", pattern=r"^(new|contacted|qualified|lost)$")
+    city: Optional[str] = Field(default=None, max_length=100)
+    wants: Optional[str] = Field(default=None, max_length=500)
+    price: Optional[str] = Field(default=None, max_length=60)
     value_cents: int = Field(default=0, ge=0, le=10**12)
     notes: Optional[str] = Field(default=None, max_length=4000)
     custom_fields: Dict[str, CustomValue] = {}

@@ -2,6 +2,7 @@ import re
 
 from pydantic import EmailStr, Field, field_validator
 
+from app.shared.documents import valid_document
 from app.shared.models import StrictInput
 
 
@@ -14,8 +15,10 @@ def _strong(v: str) -> str:
 class RegisterIn(StrictInput):
     name: str = Field(min_length=2, max_length=120)
     email: EmailStr
+    document: str = Field(max_length=20)
     password: str = Field(max_length=128)
     _v = field_validator("password")(_strong)
+    _d = field_validator("document")(valid_document)
 
 
 class LoginIn(StrictInput):

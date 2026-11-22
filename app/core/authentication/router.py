@@ -21,7 +21,8 @@ GENERIC_LOGIN_ERROR = "E-mail ou senha inválidos"
 @router.post("/register", dependencies=[rate_limit("register", 10, 3600)])
 async def register(body: RegisterIn, request: Request, response: Response):
     now = utcnow()
-    user = {"name": body.name, "email": body.email.lower(), "password_hash": hash_password(body.password),
+    user = {"name": body.name, "email": body.email.lower(), "document": body.document,
+            "password_hash": hash_password(body.password),
             "email_verified": False, "mfa_enabled": False, "mfa_secret": None, "status": "active",
             "failed_logins": 0, "locked_until": None, "locale": "pt-BR", "timezone": "America/Sao_Paulo",
             "phone": None, "notification_prefs": {"email_billing": True, "email_security": True,
@@ -29,7 +30,9 @@ async def register(body: RegisterIn, request: Request, response: Response):
             "created_at": now, "updated_at": now}
     try:
         result = await db.users.insert_one(user)
-    except DuplicateKeyError:
+    except DuplicateKeyError as e:
+        if "document" in str(e):
+            raise HTTPException(status_code=409, detail="Já existe uma conta com este CPF/CNPJ")
         raise HTTPException(status_code=409, detail="Já existe uma conta com este e-mail")
     user["_id"] = result.inserted_id
     await svc.send_verification(user)
@@ -102,6 +105,12 @@ async def logout(request: Request, response: Response, user: dict = Depends(get_
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
     return {"user": user_out(user)}
+
+
+@router.get("/csrf")
+async def csrf(request: Request):
+    """Lets a frontend on another subdomain read the CSRF token it cannot see in document.cookie."""
+    return {"csrf_token": request.cookies.get("csrf_token")}
 
 
 @router.post("/verify-email", dependencies=[rate_limit("verify", 20, 3600)])

@@ -1,4 +1,5 @@
 import os
+import random
 import uuid
 
 os.environ["DB_NAME"] = os.environ.get("DB_NAME", "test_database").strip('"') + "_pytest"
@@ -72,11 +73,20 @@ class Session:
         return await self.http.delete(url, headers=self._headers())
 
 
+def gen_cpf() -> str:
+    base = [random.randint(0, 9) for _ in range(9)]
+    for n in (9, 10):
+        s = sum(base[i] * (n + 1 - i) for i in range(n))
+        base.append((s * 10 % 11) % 10)
+    return "".join(map(str, base))
+
+
 async def new_session(name="Tester") -> Session:
     http = AsyncClient(transport=ASGITransport(app=app), base_url="https://test")
     s = Session(http)
     email = f"t_{uuid.uuid4().hex[:8]}@example.com"
-    r = await s.post("/api/v1/auth/register", {"name": name, "email": email, "password": PASSWORD})
+    r = await s.post("/api/v1/auth/register", {"name": name, "email": email, "document": gen_cpf(),
+                                               "password": PASSWORD})
     assert r.status_code == 200, r.text
     s.email = email
     return s

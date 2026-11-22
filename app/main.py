@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from app.core.audit.router import router as audit_router
+from app.core.admin.router import router as admin_router
 from app.core.authentication.router import router as auth_router
 from app.core.billing.router import router as billing_router
 from app.core.config.settings import settings
@@ -16,6 +17,8 @@ from app.core.subscriptions.router import router as subscriptions_router
 from app.core.subscriptions.service import register_provisioner
 from app.core.users.router import router as users_router
 from app.database.indexes import ensure_indexes
+from app.products.crm.api.integrations_router import router as crm_integrations_router
+from app.products.crm.api.public_router import router as crm_public_router
 from app.products.crm.services.crm_service import provision_crm
 from app.products.link_bio.api.public_router import router as bio_public_router
 from app.products.link_bio.services.bio_service import provision_link_bio
@@ -38,8 +41,8 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="LEAMSE Platform API", version="1.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json",
               redoc_url=None, lifespan=lifespan)
 
-for r in [auth_router, users_router, catalog_router, subscriptions_router, billing_router, org_router, audit_router,
-          bio_public_router]:
+for r in [auth_router, users_router, catalog_router, subscriptions_router, billing_router, org_router, audit_router, admin_router,
+          bio_public_router, crm_integrations_router, crm_public_router]:
     app.include_router(r)
 for module in PRODUCT_MODULES:
     app.include_router(importlib.import_module(f"app.products.{module}.api.router").router)

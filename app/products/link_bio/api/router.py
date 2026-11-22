@@ -9,6 +9,8 @@ from app.products.link_bio.repositories import repos
 from app.products.link_bio.schemas.inputs import AvatarIn, HandleIn, LinkIn, ProfileIn, PublishIn, ReorderIn, ThemeIn
 from app.products.link_bio.services import bio_service as svc
 from app.products.link_bio.services.socials import NETWORKS, normalize_url
+
+FREE, FREE_SOCIALS = "gratis", 3
 from app.shared.models import to_oid
 
 P = "link_bio"
@@ -23,7 +25,8 @@ async def _log(ctx: ProductContext, action: str, request: Request, target_id=Non
 
 @router.get("/meta")
 async def meta(ctx: ProductContext = Depends(read)):
-    return {"networks": NETWORKS, "presets": svc.PRESETS,
+    return {"networks": NETWORKS, "presets": svc.PRESETS, "plan_key": ctx.subscription["plan_key"],
+            "is_free": ctx.subscription["plan_key"] == FREE, "free_social_limit": FREE_SOCIALS,
             "suggestions": svc.suggestions(ctx.subscription["segment"])}
 
 
@@ -32,6 +35,7 @@ async def overview(ctx: ProductContext = Depends(read)):
     page = await svc.get_page(ctx.org_id)
     stats7 = await svc.analytics(ctx.org_id, 7)
     return {"handle": page.handle, "published": page.published, "display_name": page.display_name,
+            "is_free": ctx.subscription["plan_key"] == FREE,
             "links_total": await repos.links.count(ctx.org_id),
             "links_active": await repos.links.count(ctx.org_id, {"active": True}),
             "socials_total": len(page.socials), "views_7d": stats7["views"], "clicks_7d": stats7["clicks"],
@@ -53,6 +57,8 @@ async def update_profile(body: ProfileIn, request: Request, ctx: ProductContext 
         raise HTTPException(status_code=422, detail=str(e))
     if len({s["network"] for s in data["socials"]}) != len(data["socials"]):
         raise HTTPException(status_code=422, detail="Cada rede social pode ser adicionada uma vez")
+    if ctx.subscription["plan_key"] == FREE and len(data["socials"]) > FREE_SOCIALS:
+        raise HTTPException(status_code=402, detail=f"No plano Grátis você pode adicionar até {FREE_SOCIALS} redes sociais")
     updated = await repos.pages.update(ctx.org_id, page.id, data, body.version)
     await _log(ctx, "profile_updated", request, page.id)
     return updated.out()
@@ -142,6 +148,8 @@ async def get_theme(ctx: ProductContext = Depends(read)):
 
 @router.put("/theme")
 async def update_theme(body: ThemeIn, request: Request, ctx: ProductContext = Depends(write)):
+    if ctx.subscription["plan_key"] == FREE:
+        raise HTTPException(status_code=402, detail="Aparências personalizadas estão disponíveis nos planos pagos")
     if body.preset not in svc.PRESETS:
         raise HTTPException(status_code=422, detail="Tema inexistente")
     theme = await svc.get_theme(ctx.org_id)

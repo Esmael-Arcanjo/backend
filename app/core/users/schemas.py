@@ -1,8 +1,14 @@
+import os
 from typing import Optional
 
 from pydantic import Field
 
 from app.shared.models import StrictInput
+
+
+def is_platform_admin(user: dict) -> bool:
+    admins = {e.strip().lower() for e in os.environ.get("PLATFORM_ADMIN_EMAILS", "").split(",") if e.strip()}
+    return user.get("email", "").lower() in admins
 
 
 def user_out(user: dict) -> dict:
@@ -11,6 +17,7 @@ def user_out(user: dict) -> dict:
         "email_verified": user.get("email_verified", False), "mfa_enabled": user.get("mfa_enabled", False),
         "phone": user.get("phone"), "locale": user.get("locale"), "timezone": user.get("timezone"),
         "notification_prefs": user.get("notification_prefs", {}),
+        "document": user.get("document"), "is_admin": is_platform_admin(user),
         "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
     }
 

@@ -20,6 +20,7 @@ class CheckoutIn(StrictInput):
     organization: Optional[OrganizationIn] = None
     organization_id: Optional[str] = Field(default=None, max_length=24)
     origin_url: str = Field(max_length=300)
+    payment_method: str = Field(default="card", pattern=r"^(card|pix)$")
 
     @field_validator("origin_url")
     @classmethod

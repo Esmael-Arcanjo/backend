@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from typing import Awaitable, Callable, Dict, Optional
 
 from bson import ObjectId
@@ -27,10 +28,20 @@ async def activate_subscription(subscription_id: ObjectId, stripe_subscription_i
                                 stripe_customer_id: Optional[str], source: str) -> bool:
     """Idempotent: only a pending subscription transitions to active."""
     now = utcnow()
+    pending = await db.subscriptions.find_one({"_id": subscription_id, "status": "pending"})
+    if pending:
+        await db.subscriptions.update_many(
+            {"organization_id": pending["organization_id"], "product_key": pending["product_key"], "is_current": True,
+             "$or": [{"price_cents": 0}, {"billing_method": "pix"}]},
+            {"$set": {"is_current": False, "status": "replaced", "updated_at": now}})
+    extra = {}
+    if pending and pending.get("billing_method") == "pix":
+        days = 365 if pending.get("interval") == "year" else 30
+        extra["current_period_end"] = int((now + timedelta(days=days)).timestamp())
     try:
         sub = await db.subscriptions.find_one_and_update(
             {"_id": subscription_id, "status": "pending"},
-            {"$set": {"status": "active", "is_current": True, "activated_at": now, "updated_at": now,
+            {"$set": {"status": "active", "is_current": True, "activated_at": now, "updated_at": now, **extra,
                       "stripe_subscription_id": stripe_subscription_id, "stripe_customer_id": stripe_customer_id}},
             return_document=ReturnDocument.AFTER)
     except DuplicateKeyError:

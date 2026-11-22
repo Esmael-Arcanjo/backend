@@ -5,7 +5,9 @@ from app.database.mongo import db
 DAY = 86400
 
 PLATFORM_INDEXES = {
-    "users": [IndexModel([("email", ASCENDING)], unique=True)],
+    "users": [IndexModel([("email", ASCENDING)], unique=True),
+              IndexModel([("document", ASCENDING)], unique=True, name="one_account_per_document",
+                         partialFilterExpression={"document": {"$type": "string"}})],
     "organizations": [IndexModel([("owner_id", ASCENDING)])],
     "organization_members": [
         IndexModel([("organization_id", ASCENDING), ("user_id", ASCENDING)], unique=True),
@@ -59,6 +61,7 @@ PLATFORM_INDEXES = {
 
 TENANT_COLLECTIONS = [
     "crm_leads", "crm_contacts", "crm_opportunities", "crm_activities", "crm_pipelines",
+    "crm_messages", "crm_whatsapp", "crm_settings",
     "erp_products", "erp_inventory", "erp_purchases", "erp_sales", "erp_invoices",
     "email_domains", "email_messages", "email_templates", "email_api_keys", "email_events",
     "payment_intents", "payment_transactions", "payment_refunds", "payment_webhooks",
@@ -72,11 +75,24 @@ TENANT_COLLECTIONS = [
 ]
 
 EXTRA_TENANT_INDEXES = {
-    "crm_leads": [IndexModel([("organization_id", ASCENDING), ("status", ASCENDING)])],
+    "crm_leads": [IndexModel([("organization_id", ASCENDING), ("status", ASCENDING)]),
+                  IndexModel([("organization_id", ASCENDING), ("phone_normalized", ASCENDING)], unique=True,
+                             name="one_lead_per_whatsapp",
+                             partialFilterExpression={"phone_normalized": {"$type": "string"}})],
+    "crm_messages": [IndexModel([("organization_id", ASCENDING), ("contact_id", ASCENDING), ("created_at", ASCENDING)]),
+                     IndexModel([("wa_id", ASCENDING)], unique=True, name="one_wa_message",
+                                partialFilterExpression={"wa_id": {"$type": "string"}})],
     "crm_opportunities": [IndexModel([("organization_id", ASCENDING), ("stage_key", ASCENDING)])],
     "crm_activities": [IndexModel([("organization_id", ASCENDING), ("done", ASCENDING), ("due_at", ASCENDING)])],
     "crm_pipelines": [IndexModel([("organization_id", ASCENDING)], unique=True)],
-    "crm_contacts": [IndexModel([("organization_id", ASCENDING), ("email", ASCENDING)])],
+    "crm_contacts": [IndexModel([("organization_id", ASCENDING), ("email", ASCENDING)]),
+                     IndexModel([("organization_id", ASCENDING), ("phone_normalized", ASCENDING)], unique=True,
+                                name="one_contact_per_whatsapp",
+                                partialFilterExpression={"phone_normalized": {"$type": "string"}})],
+    "crm_whatsapp": [IndexModel([("organization_id", ASCENDING)], unique=True),
+                     IndexModel([("webhook_secret", ASCENDING)], unique=True)],
+    "crm_settings": [IndexModel([("organization_id", ASCENDING)], unique=True),
+                     IndexModel([("webhook_token_hash", ASCENDING)])],
     "bio_pages": [IndexModel([("handle", ASCENDING)], unique=True),
                   IndexModel([("organization_id", ASCENDING)], unique=True, name="one_page_per_org")],
     "bio_links": [IndexModel([("organization_id", ASCENDING), ("position", ASCENDING)])],

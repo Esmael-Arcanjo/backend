@@ -10,6 +10,11 @@ UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_EXEMPT = {
     "/api/stripe/webhook",
     "/api/v1/auth/register",
+    "/api/v1/auth/login",
+    "/api/v1/auth/login/mfa",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
+    "/api/v1/auth/verify-email",
 }
 
 
@@ -19,7 +24,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api") and not await limiter.hit(f"ip:{client_ip(request)}", 600, 60):
             return JSONResponse({"detail": "Muitas requisições. Tente novamente em instantes."}, status_code=429)
         if request.method in UNSAFE and path.startswith("/api") and path not in CSRF_EXEMPT \
-                and not path.startswith("/api/v1/public/"):
+                and path != "/api/leads" and not path.startswith(("/api/v1/public/", "/api/webhooks/")):
             has_session = "access_token" in request.cookies or "refresh_token" in request.cookies
             if has_session:
                 cookie = request.cookies.get("csrf_token", "")

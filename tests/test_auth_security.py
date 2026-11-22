@@ -13,7 +13,7 @@ async def test_argon2id_hash():
 
 async def test_register_rejects_weak_password():
     s = await new_session()
-    r = await s.post("/api/v1/auth/register", {"name": "X Y", "email": "weak@example.com", "password": "123"})
+    r = await s.post("/api/v1/auth/register", {"name": "X Y", "email": "weak@example.com", "document": "52998224725", "password": "123"})
     assert r.status_code == 422
 
 
