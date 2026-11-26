@@ -33,12 +33,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                     return JSONResponse({"detail": "Falha na verificação CSRF"}, status_code=403)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
         if not path.startswith("/api/docs") and not path.startswith("/api/openapi"):
-            response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+            response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'self'"
         if path.startswith("/api/v1/auth") or path.startswith("/api/v1/users"):
             response.headers["Cache-Control"] = "no-store"
         return response

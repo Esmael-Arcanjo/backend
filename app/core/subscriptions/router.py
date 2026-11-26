@@ -40,6 +40,7 @@ async def my_subscriptions(user: dict = Depends(get_current_user)):
         if sub and org and product:
             items.append({"product_key": g["product_key"], "product_name": product["name"], "slug": product["slug"],
                           "organization_name": org["name"], "organization_id": str(org["_id"]),
+                          "segment_name": SEGMENTS.get(sub["segment"], sub["segment"]),
                           "status": sub["status"], "plan_key": sub["plan_key"], "role": g["role"]})
     pending = await db.subscriptions.find({"created_by": user["_id"], "status": "pending"}).to_list(20)
     return {"subscriptions": items, "pending_count": len(pending)}
